@@ -1,0 +1,454 @@
+using DevExpress.XtraGrid.Columns;
+using DevExpress.XtraSplashScreen;
+using NBA.ServiceSchedule.Core.Abstracts.Services;
+using NBA.ServiceSchedule.Core.Constants.Enums;
+using NBA.ServiceSchedule.Core.Global;
+using NBA.ServiceSchedule.Core.Models.DAOs;
+using NBA.ServiceSchedule.DataAccess.Implementation;
+using NBA.ServiceSchedule.DataAccess.Implementation.Services;
+using NBA.ServiceSchedule.Forms.Helpers;
+using NBA.ServiceSchedule.Forms.Lists;
+using NBA.ServiceSchedule.Models;
+using Spire.Xls;
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using NBA.ServiceSchedule.Core.Models.Options;
+
+namespace NBA.ServiceSchedule.Forms.Report
+{
+    public partial class ClientServicePaymentReportForm : DevExpress.XtraEditors.XtraForm
+    {
+        private const string ClientCodeColumnName = "ClientCode";
+        private const string ClientNameColumnName = "ClientName";
+        private const string ActiveColumnName = "Active";
+        private const string DescriptionColumnName = "Description";
+        private const string TotalPaymentColumnName = "Total";
+
+        private readonly List<ServiceDto> _serviceDtoList;
+        private readonly IServiceCardService _serviceCardService;
+        private readonly IServiceOperationDocumentService _serviceOperationDocumentService;
+        private readonly IClientPaymentNoteService _clientPaymentNoteService;
+        private List<ClientDto> _selectedClients;
+
+        public ClientServicePaymentReportForm()
+        {
+            InitializeComponent();
+
+            _serviceDtoList = new List<ServiceDto>();
+            _serviceCardService = ServiceContainer.ServiceCardService;
+            _serviceOperationDocumentService = new ServiceOperationDocumentService();
+            _clientPaymentNoteService = new ClientPaymentNoteService();
+        }
+
+        private DateTime LastDate
+        {
+            get => dateEdit1.DateTime;
+            set => dateEdit1.DateTime = value;
+        }
+
+        private async void UcClientServicePaymentReport_Load(object sender, EventArgs e)
+        {
+            try
+            {
+                var today = DateTime.Today;
+                LastDate = new DateTime(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month));
+
+                var serviceResult = await _serviceCardService.GetAllAsync();
+                if (serviceResult.IsFailed)
+                {
+                    MessageBox.Show(serviceResult.ErrorMessages.FirstOrDefault());
+                    return;
+                }
+                if (serviceResult.Data == null || !serviceResult.Data.Any())
+                {
+                    MessageBox.Show(@"Sistemdə servis yoxdur.");
+                    return;
+                }
+
+                _serviceDtoList.AddRange(serviceResult.Data.Select(ServiceDto.FromEntity));
+
+                gridViewReport.Columns.Add(new GridColumn { Name = $"col{nameof(ClientDetailsDao.TaxNumber)}", Caption = @"VOEN", FieldName = nameof(ClientDetailsDao.TaxNumber), Visible = true });
+                gridViewReport.Columns.Add(new GridColumn { Name = $"col{nameof(ClientDetailsDao.ContractNumber)}", Caption = @"Muqavile No", FieldName = nameof(ClientDetailsDao.ContractNumber), Visible = true });
+                gridViewReport.Columns.Add(new GridColumn { Name = $"col{nameof(ClientDetailsDao.ContractDate)}", Caption = @"Muqavile tarixi", FieldName = nameof(ClientDetailsDao.ContractDate), Visible = true });
+                gridViewReport.Columns.Add(new GridColumn { Name = $"col{nameof(ClientDetailsDao.GroupName)}", Caption = @"Qrup", FieldName = nameof(ClientDetailsDao.GroupName), Visible = true });
+                gridViewReport.Columns.Add(new GridColumn { Name = $"col{nameof(ClientDetailsDao.Address)}", Caption = @"Unvan", FieldName = nameof(ClientDetailsDao.Address), Visible = true });
+                gridViewReport.Columns.Add(new GridColumn { Name = $"col{nameof(ClientDetailsDao.Contact)}", Caption = @"Kontakt", FieldName = nameof(ClientDetailsDao.Contact), Visible = true });
+                gridViewReport.Columns.Add(new GridColumn { Name = $"col{nameof(ClientDetailsDao.Email)}", Caption = @"Email", FieldName = nameof(ClientDetailsDao.Email), Visible = true });
+
+                foreach (var service in _serviceDtoList)
+                {
+                    var servicePaymentColumn = new GridColumn
+                    {
+                        Name = "col" + service.Code,
+                        Caption = service.ServiceName,
+                        FieldName = service.Code,
+                        Visible = true
+                    };
+                    servicePaymentColumn.Summary.AddRange(new DevExpress.XtraGrid.GridSummaryItem[] {
+                        new DevExpress.XtraGrid.GridColumnSummaryItem(DevExpress.Data.SummaryItemType.Sum, service.Code, "SUM={0:0.##}")});
+
+                    gridViewReport.Columns.Add(servicePaymentColumn);
+                    gridViewReport.GroupSummary.Add(new DevExpress.XtraGrid.GridGroupSummaryItem(DevExpress.Data.SummaryItemType.Sum, "", servicePaymentColumn, ""));
+
+                    var serviceCountColumn = new GridColumn
+                    {
+                        Name = "col" + service.Code + "Count",
+                        Caption = service.ServiceName + @" Sayı",
+                        FieldName = service.Code + "Count",
+                        Visible = true
+                    };
+                    serviceCountColumn.Summary.AddRange(new DevExpress.XtraGrid.GridSummaryItem[] {
+                        new DevExpress.XtraGrid.GridColumnSummaryItem(DevExpress.Data.SummaryItemType.Sum, service.Code + "Count", "SUM={0:0.##}")});
+
+                    gridViewReport.Columns.Add(serviceCountColumn);
+                    gridViewReport.GroupSummary.Add(new DevExpress.XtraGrid.GridGroupSummaryItem(DevExpress.Data.SummaryItemType.Sum, "", serviceCountColumn, ""));
+                }
+
+                //Add Total column
+                var totalColumn = new GridColumn
+                { Name = "colTotal", Caption = @"Cəmi", FieldName = TotalPaymentColumnName, Visible = true };
+
+                totalColumn.Summary.AddRange(new DevExpress.XtraGrid.GridSummaryItem[] { new DevExpress.XtraGrid.GridColumnSummaryItem(DevExpress.Data.SummaryItemType.Sum, totalColumn.FieldName, "SUM={0:0.##}") });
+                gridViewReport.Columns.Add(totalColumn);
+                gridViewReport.GroupSummary.Add(new DevExpress.XtraGrid.GridGroupSummaryItem(DevExpress.Data.SummaryItemType.Sum, "", totalColumn, ""));
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(exception.Message);
+            }
+        }
+
+        private void BtnSaleInvoice_Click(object sender, EventArgs e)
+        {
+            if (!(gridControlReport.DataSource is DataTable dataSource))
+            {
+                MessageBox.Show(@"Məlumatlar gətirilməyib.");
+                return;
+            }
+
+            var list = new List<ClientAccountOperationDao>();
+
+            for (var i = 0; i < dataSource.Rows.Count; i++)
+            {
+                if (Convert.ToInt32(dataSource.Rows[i][ActiveColumnName]) == 1)
+                {
+                    var clientCode = dataSource.Rows[i][ClientCodeColumnName].ToString();
+                    var totalPayments = Convert.ToDecimal(dataSource.Rows[i][TotalPaymentColumnName]);
+
+                    var dao = new ClientAccountOperationDao();
+                    dao.cha_kod = dao.cha_ciro_cari_kodu = clientCode;
+                    dao.cha_miktari = 1;
+                    dao.cha_meblag = Math.Round(totalPayments * 1.18M, 2);
+                    dao.cha_vergipntr = 4;
+                    dao.cha_aratoplam = totalPayments;
+                    dao.cha_vergi4 = Math.Round(totalPayments * 0.18M, 2);
+
+                    list.Add(dao);
+                }
+            }
+
+            if (!list.Any())
+            {
+                MessageBox.Show(@"Saxlanacaq faktura yoxdur.");
+                return;
+            }
+
+            using (var form = new SaleInvoiceForm(list.ToList()))
+            {
+                form.ShowDialog();
+                if (form.InvoicesCreated) btnSaleInvoice.Enabled = false;
+            }
+        }
+
+        private async void BtnRefresh_Click(object sender, EventArgs e)
+        {
+            await LoadReport();
+        }
+
+        private IOverlaySplashScreenHandle ShowProgressPanel()
+        {
+            return SplashScreenManager.ShowOverlayForm(this);
+        }
+
+        private static void CloseProgressPanel(IOverlaySplashScreenHandle handle)
+        {
+            if (handle != null)
+                SplashScreenManager.CloseOverlayForm(handle);
+        }
+
+        private async Task LoadReport()
+        {
+            IOverlaySplashScreenHandle handle = null;
+
+            try
+            {
+                handle = ShowProgressPanel();
+
+                if (_selectedClients != null && _selectedClients.Any())
+                {
+                    GC.Collect(0);
+                    GC.Collect(1);
+
+                    var lastDate = LastDate;
+                    var firstDate = new DateTime(lastDate.Year, lastDate.Month, 1);
+                    //var daysInMonth = DateTime.DaysInMonth(lastDate.Year, lastDate.Month);
+
+                    var dataTable = new DataTable();
+                    dataTable.Columns.AddRange(gridViewReport.Columns.Select(c => new DataColumn(c.FieldName)).ToArray());
+
+                    var invoiceSeries = GlobalParameters.SaleInvoiceSeries;
+                    var insertedInvoicesResult =
+                        await RepositoryContainer.ClientAccountOperationRepository.GetClientsWithInvoices(lastDate, _selectedClients.Select(c => c.ClientCode).ToList(), invoiceSeries);
+
+                    if (insertedInvoicesResult.IsFailed)
+                    {
+                        MessageBox.Show(insertedInvoicesResult.ErrorMessages.FirstOrDefault());
+                        return;
+                    }
+
+                    var clientsWithInvoices = insertedInvoicesResult.Data;
+
+
+                    var clientServicePaymentService =
+                        new ClientServicePaymentService(new ClientServicePaymentOptions
+                        {
+                            FilteredClientCodeList = _selectedClients.Select(c => c.ClientCode).ToList(),
+                            FilteredServiceCodeList = _serviceDtoList.Select(s => s.Code).ToList(),
+                            FirstDate = firstDate,
+                            LastDate = lastDate
+                        });
+
+                    await clientServicePaymentService.LoadServices();
+                    await clientServicePaymentService.LoadClientServiceDocumentsAsync();
+                    await clientServicePaymentService.LoadClientServiceFirstDateCountsAsync();
+
+                    foreach (var client in _selectedClients)
+                    {
+                        var row = dataTable.NewRow();
+                        row[ClientCodeColumnName] = client.ClientCode;
+                        row[ClientNameColumnName] = client.ClientName;
+
+                        var daoDetailsResult =
+                            await RepositoryContainer.ClientRepository.GetClientDetails(client.ClientCode);
+                        if (daoDetailsResult.IsFailed)
+                        {
+                            MessageBox.Show(daoDetailsResult.ErrorMessages.FirstOrDefault());
+                            return;
+                        }
+
+                        row[nameof(ClientDetailsDao.TaxNumber)] = daoDetailsResult.Data.TaxNumber;
+                        row[nameof(ClientDetailsDao.ContractNumber)] = daoDetailsResult.Data.ContractNumber;
+                        row[nameof(ClientDetailsDao.ContractDate)] = daoDetailsResult.Data.ContractDate;
+                        row[nameof(ClientDetailsDao.GroupName)] = daoDetailsResult.Data.GroupName;
+                        row[nameof(ClientDetailsDao.Address)] = daoDetailsResult.Data.Address;
+                        row[nameof(ClientDetailsDao.Contact)] = daoDetailsResult.Data.Contact;
+                        row[nameof(ClientDetailsDao.Email)] = daoDetailsResult.Data.Email;
+
+                        if (_serviceDtoList == null || !_serviceDtoList.Any())
+                        {
+                            MessageBox.Show(@"Sistemdə servis yoxdur.");
+                            return;
+                        }
+
+                        //var documentsResult =
+                        //    await RepositoryContainer.ServiceOperationDocumentRepository.GetClientDocuments(
+                        //        client.ClientCode, new DateTime(lastDate.Year, lastDate.Month, 1), lastDate);
+                        //if (documentsResult.IsFailed)
+                        //{
+                        //    MessageBox.Show(documentsResult.ErrorMessages.FirstOrDefault());
+                        //    return;
+                        //}
+
+                        var totalPayments = 0M;
+                        bool active;
+
+                        foreach (var service in _serviceDtoList)
+                        {
+                            //var documents = documentsResult.Data.Where(d => d.ServiceCode == service.Code
+                            //                                                //Ayın sonundan 2 günü nəzərə almırıq.
+                            //                                                && d.Date.Day < daysInMonth - 1).ToList();
+                            //var serviceTotalPayment = 0M;
+
+                            //var oldServiceCountResult = await _serviceOperationDocumentService.GetClientActiveServiceCount(service.Code,
+                            //    client.ClientCode, new DateTime(lastDate.Year, lastDate.Month, 1));
+
+                            //if (oldServiceCountResult.IsFailed)
+                            //{
+                            //    MessageBox.Show(oldServiceCountResult.ErrorMessages.FirstOrDefault());
+                            //    return;
+                            //}
+
+                            //var oldDocumentsCount = oldServiceCountResult.Data;
+
+                            //if (documents.Any())
+                            //{
+                            //    var currentMonthMonthlyInstallationCount = documents
+                            //        .Count(d => d.ServiceOperationType == ServiceOperationType.Installation && d.Date.Day <= 2);
+
+                            //    var currentMonthDailyInstallationCount = documents
+                            //        .Count(d => d.ServiceOperationType == ServiceOperationType.Installation && d.Date.Day > 2);
+
+                            //    var currentMonthMonthlyCancellationCount = documents
+                            //        .Count(d => d.ServiceOperationType == ServiceOperationType.Cancellation && d.Date.Day <= 2);
+
+                            //    var remainedCurrentMonthMonthlyInstallationCount = currentMonthMonthlyInstallationCount - currentMonthMonthlyCancellationCount;
+
+                            //    oldDocumentsCount += remainedCurrentMonthMonthlyInstallationCount;
+
+                            //    var currentMonthDailyCancellationCount = documents
+                            //        .Count(d => d.ServiceOperationType == ServiceOperationType.Cancellation && d.Date.Day > 2);
+
+                            //    var different = currentMonthDailyCancellationCount - currentMonthDailyInstallationCount;
+                            //    if (different > 0)
+                            //    {
+                            //        oldDocumentsCount -= different;
+                            //        serviceTotalPayment += different * lastDate.Day * service.DailyPaymentAmount;
+                            //    }
+
+                            //    var currentMonthDailyInstalledServicesTotalPayment = documents
+                            //        .Where(d => d.ServiceOperationType == ServiceOperationType.Installation && d.Date.Day > 2)
+                            //        .Sum(d => d.Count * (lastDate.Day - d.Date.Day + 1) * service.DailyPaymentAmount);
+
+                            //    var currentMonthDailyCancelledServicesTotalPayment = documents
+                            //        .Where(d => d.ServiceOperationType == ServiceOperationType.Cancellation && d.Date.Day > 2)
+                            //        .Sum(d => d.Count * (lastDate.Day - d.Date.Day + 1) * service.DailyPaymentAmount);
+
+                            //    serviceTotalPayment += oldDocumentsCount * (daysInMonth == lastDate.Day ? service.MonthlyPaymentAmount : service.DailyPaymentAmount * lastDate.Day) + currentMonthDailyInstalledServicesTotalPayment - currentMonthDailyCancelledServicesTotalPayment;
+                            //}
+                            var serviceTotalPaymentResult = clientServicePaymentService.CalculateClientServicePayment(
+                                new ClientServicePaymentCalculationOptions
+                                {
+                                    ClientCode = client.ClientCode,
+                                    ServiceCode = service.Code
+                                });
+
+                            if (serviceTotalPaymentResult.IsFailed)
+                            {
+                                MessageBox.Show(serviceTotalPaymentResult.ErrorMessages.FirstOrDefault());
+                                return;
+                            }
+
+                            totalPayments += serviceTotalPaymentResult.Data;
+                            row[service.Code] = serviceTotalPaymentResult.Data.ToString("0.00");
+                        }
+
+                        var clientPaymentNoteResult = await _clientPaymentNoteService.GetMonthlyClientPaymentNote(client.ClientCode, firstDate, lastDate);
+                        if (clientPaymentNoteResult.IsFailed)
+                        {
+                            MessageBox.Show(clientPaymentNoteResult.ErrorMessages.FirstOrDefault());
+                            return;
+                        }
+
+                        if (clientPaymentNoteResult.Data != null && clientPaymentNoteResult.Data.Id != 0)
+                        {
+                            row[DescriptionColumnName] = "Əvvəlcədən ödəniş qeydi";
+                            active = false;
+                        }
+                        else if (clientsWithInvoices.Contains(client.ClientCode))
+                        {
+                            row[DescriptionColumnName] = "Cari ay fakturası";
+                            active = false;
+                        }
+                        else
+                        {
+                            row[DescriptionColumnName] = $"Ödənilməli ({totalPayments:0.00})";
+                            active = totalPayments > 0;
+                        }
+
+                        row[TotalPaymentColumnName] = totalPayments.ToString("0.00");
+                        row[ActiveColumnName] = active ? 1 : 0;
+                        dataTable.Rows.Add(row);
+                    }
+
+                    gridControlReport.DataSource = dataTable;
+                    gridControlReport.RefreshDataSource();
+
+                    btnSaleInvoice.Enabled = true;
+                }
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(exception.Message);
+            }
+            finally
+            {
+                CloseProgressPanel(handle);
+            }
+        }
+
+        private async void ButtonEditClients_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
+        {
+            using (var form = new ClientListForm())
+            {
+                form.ShowDialog();
+                var clients = form.GetSelectedClients();
+
+                if (_selectedClients == null) _selectedClients = new List<ClientDto>();
+                else _selectedClients.Clear();
+
+                _selectedClients.AddRange(clients);
+
+                buttonEditClients.Text = _selectedClients.Count <= 3 ?
+                    string.Join(", ", _selectedClients.Select(c => c.ClientCode)) :
+                    $"{clients.Count} cari seçilib";
+
+                await LoadReport();
+            }
+        }
+
+        private void BtnExportToExcel_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                var lines = (List<object>)gridViewReport.DataController.GetAllFilteredAndSortedRows();
+
+                if (lines == null || lines.Count == 0)
+                {
+                    MessageBox.Show(@"Saxlanılacaq sətir yoxdur");
+                    return;
+                }
+
+                var saveFileDialog = new SaveFileDialog { Filter = @"Excel Workbook|*.xls", ValidateNames = true };
+                if (saveFileDialog.ShowDialog() != DialogResult.OK) return;
+
+                var wb = new Workbook();
+                var ws = wb.Worksheets[0];
+
+                var dataTable = (DataTable)gridControlReport.DataSource;
+
+                var columnNumber = 1;
+                foreach (GridColumn column in gridViewReport.Columns)
+                {
+                    var rowNumber = 1;
+                    ws.Range[rowNumber++, columnNumber].Text = column.Caption;
+
+                    foreach (DataRow row in dataTable.Rows)
+                    {
+                        ws.Range[rowNumber, columnNumber].Text = row[column.FieldName].ToString();
+                        var active = row[ActiveColumnName].ToString();
+                        ws.Range[rowNumber, columnNumber].Style.Font.Color = active == "1" ? Color.MediumSeaGreen : Color.Red;
+
+                        rowNumber++;
+                    }
+
+                    columnNumber++;
+                }
+
+                wb.Worksheets.RemoveAt(1);
+                wb.Worksheets.RemoveAt(1);
+                wb.SaveToFile(saveFileDialog.FileName, ExcelVersion.Version2007);
+                MessageBox.Show(@"Cədvəl excelə export edildi");
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(@"Excelə export edilərkən xəta yarandı.");
+                MessageBox.Show(exception.Message);
+            }
+        }
+    }
+}

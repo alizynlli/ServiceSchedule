@@ -1,0 +1,94 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{8D667DEB-07E7-4047-BE62-9985938C0057}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>NBA.ServiceSchedule.Core</RootNamespace>
+    <AssemblyName>NBA.ServiceSchedule.Core</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Abstracts\Repositories\IClientPaymentNoteRepository.cs" />
+    <Compile Include="Abstracts\Repositories\IRepositoryBase.cs" />
+    <Compile Include="Abstracts\Repositories\IServiceOperationDocumentRepository.cs" />
+    <Compile Include="Abstracts\Repositories\IServiceRepository.cs" />
+    <Compile Include="Abstracts\Repositories\IUserRepository.cs" />
+    <Compile Include="Abstracts\Services\IClientPaymentNoteService.cs" />
+    <Compile Include="Abstracts\Services\IClientServicePaymentService.cs" />
+    <Compile Include="Abstracts\Services\IServiceBase.cs" />
+    <Compile Include="Abstracts\Services\IServiceCardService.cs" />
+    <Compile Include="Abstracts\Services\IServiceOperationDocumentService.cs" />
+    <Compile Include="Abstracts\Services\IUserService.cs" />
+    <Compile Include="ActionResult.cs" />
+    <Compile Include="Constants\Enums\Months.cs" />
+    <Compile Include="Constants\Enums\ServiceOperationType.cs" />
+    <Compile Include="Abstracts\DbContext\IDatabaseObject.cs" />
+    <Compile Include="Abstracts\DbContext\IFunctionObject.cs" />
+    <Compile Include="Abstracts\DbContext\IProcedureObject.cs" />
+    <Compile Include="Abstracts\DbContext\ITableObject.cs" />
+    <Compile Include="Constants\PermissionKeys.cs" />
+    <Compile Include="Extensions\EnumExtensions.cs" />
+    <Compile Include="Extensions\StringExtensions.cs" />
+    <Compile Include="Global\GlobalParameters.cs" />
+    <Compile Include="Global\Session.cs" />
+    <Compile Include="Models\DAOs\BaseDao.cs" />
+    <Compile Include="Models\DAOs\ClientAccountOperationDao.cs" />
+    <Compile Include="Models\DAOs\ClientDetailsDao.cs" />
+    <Compile Include="Models\DAOs\ClientPaymentNoteDao.cs" />
+    <Compile Include="Models\DAOs\ClientServiceCount.cs" />
+    <Compile Include="Models\DAOs\DocumentDescriptionDao.cs" />
+    <Compile Include="Models\DAOs\PermissionDao.cs" />
+    <Compile Include="Models\DAOs\ServiceDao.cs" />
+    <Compile Include="Models\DAOs\ServiceOperationDocumentDao.cs" />
+    <Compile Include="Models\DAOs\UserDao.cs" />
+    <Compile Include="Models\Entities\BaseEntity.cs" />
+    <Compile Include="Models\Entities\ClientPaymentNoteEntity.cs" />
+    <Compile Include="Models\Entities\ClientServicePaymentEntity.cs" />
+    <Compile Include="Models\Entities\PermissionEntity.cs" />
+    <Compile Include="Models\Entities\ServiceEntity.cs" />
+    <Compile Include="Models\Entities\ServiceOperationDocumentEntity.cs" />
+    <Compile Include="Models\Entities\UserEntity.cs" />
+    <Compile Include="Models\Options\ClientServicePaymentCalculationOptions.cs" />
+    <Compile Include="Models\Options\ClientServicePaymentOptions.cs" />
+    <Compile Include="Models\Report\ClientServiceDocumentReportModel.cs" />
+    <Compile Include="Models\Report\ClientServiceCubeReportModel.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Helpers\" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
